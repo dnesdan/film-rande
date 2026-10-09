@@ -8,8 +8,11 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Film Rande — dnes večer ve dvou</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23101010'/%3E%3Cpath d='M12 7h5v18h-5z' fill='%23e50914'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./app.css?v=cinema-1">
-  <script defer src="./app.js?v=cinema-1"></script>
+  <link rel="stylesheet" href="./app.css?v=cinema-2">
+  <link rel="stylesheet" href="./catalog.css?v=cinema-2">
+  <script defer src="./audio.js?v=cinema-2"></script>
+  <script defer src="./catalog.js?v=cinema-2"></script>
+  <script defer src="./app.js?v=cinema-2"></script>
 </head>
 <body>
   <div class="shell">
@@ -17,6 +20,7 @@
       <a class="brand" href="#" id="homeLink" aria-label="Film Rande — úvod"><i class="brand-mark" aria-hidden="true"></i>FILM<span>RANDE</span></a>
       <div class="header-right">
         <div class="status" id="apiStatus" role="status"><i class="status-dot" aria-hidden="true"></i><span id="statusText">Katalog není připojen</span></div>
+        <button class="nav-btn" id="audioSettingsBtn" aria-label="Nastavení zdroje dabingu">Dabing</button>
         <button class="nav-btn" id="searchBtn" aria-label="Hledat konkrétní titul" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>Hledat</span></button>
         <button class="nav-btn" id="settingsBtn" aria-label="Odpojit katalog a změnit API klíč" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v9m-5-6a8 8 0 1 0 10 0"/></svg><span>Odpojit</span></button>
       </div>
@@ -26,7 +30,7 @@
         <div>
           <div class="eyebrow">Váš soukromý filmový večer</div>
           <h1 id="connectTitle">Dnes večer.<br><span>Na stejný film.</span></h1>
-          <p class="lede">Vyberte si každý po svém. My najdeme filmy, na které máte chuť oba.</p>
+          <p class="lede">Vyber si film pro sebe, nebo najděte společný tip ve dvou. Z vašeho předplatného, podle vaší nálady.</p>
           <div class="service-names"><span>NETFLIX</span><i aria-hidden="true"></i><span>HBO Max</span></div>
           <div class="connection-steps"><span><b>01</b> Tvůj výběr</span><span><b>02</b> Její výběr</span><span><b>03</b> Společný film</span></div>
         </div>
@@ -72,7 +76,13 @@
               <div><label class="field-label" for="runtimeSelect" id="runtimeLabel">Délka filmu</label><select class="field" id="runtimeSelect"><option value="0">Bez omezení</option><option value="90">Do 90 minut</option><option value="110">Do 110 minut</option><option value="130" selected>Do 130 minut</option><option value="160">Do 160 minut</option></select></div>
               <div><label class="field-label" for="ratingSelect">Hodnocení TMDb</label><select class="field" id="ratingSelect"><option value="0">Bez omezení</option><option value="6" selected>Alespoň 6 / 10</option><option value="7">Alespoň 7 / 10</option><option value="8">Alespoň 8 / 10</option></select></div>
             </div></details>
-            <div class="form-section"><div class="section-title"><h3>Jak budete vybírat?</h3></div><div class="segmented" role="group" aria-label="Způsob výběru"><label><input type="radio" name="playMode" value="couple" checked>Hlasovat ve dvou</label><label><input type="radio" name="playMode" value="quick">Jen rychlý tip</label></div></div>
+            <div class="form-section audio-filter-section">
+              <div class="section-title"><h3>Dabing / jazyk zvuku</h3><button type="button" class="text-btn" data-audio-settings>Nastavit zdroj</button></div>
+              <label class="sr-only" for="audioFilter">Požadovaný jazyk zvuku</label>
+              <select class="field" id="audioFilter"><option value="any">Na jazyku nezáleží</option><option value="cs">Český zvuk</option><option value="sk">Slovenský zvuk</option><option value="cs-sk">Český nebo slovenský zvuk</option></select>
+              <p class="small-note" id="audioFilterHelp">Dabing i původní CZ/SK zvuk, ne titulky. Vyžaduje vlastní klíč ke zdroji zvukových stop.</p>
+            </div>
+            <div class="form-section"><div class="section-title"><h3>Jak budeš vybírat?</h3></div><div class="segmented" role="group" aria-label="Způsob výběru"><label><input type="radio" name="playMode" value="couple" checked>Ve dvou</label><label><input type="radio" name="playMode" value="solo">Pro jednoho</label><label><input type="radio" name="playMode" value="quick">Jen rychlý tip</label></div></div>
             <div class="start-row"><button type="submit" class="btn btn-primary btn-block" id="startBtn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>Najít náš film</button><p id="modeHelp">Až 16 titulů. Dva soukromé výběry. Vaše společné shody.</p></div>
             <div id="filterError" class="error" role="alert" hidden></div>
           </form>
@@ -83,6 +93,21 @@
             <div class="preview-guide"><div><b>01 / Vybereš ty</b>Ano, možná, nebo ne.</div><div><b>02 / Vybere ona</b>Stejné filmy. Bez nápovědy.</div><div><b>03 / Pustíte si film</b>Jen to, co zaujalo oba.</div></div>
           </aside>
         </div>
+      </section>
+      <section id="soloScreen" hidden aria-labelledby="soloTitle">
+        <div class="solo-heading"><div><div class="eyebrow">Tvůj vlastní výběr / Česko</div><h1 id="soloTitle">Dnes vybíráš ty.</h1><p id="soloCriteria" class="lede"></p></div><button type="button" class="btn btn-ghost" id="soloFiltersBtn">Upravit výběr</button></div>
+        <div class="solo-toolbar">
+          <div><label class="field-label" for="soloQuery">Hledat v načteném výběru</label><input class="field" type="search" id="soloQuery" placeholder="Název filmu nebo seriálu" autocomplete="off"></div>
+          <div><label class="field-label" for="soloOrder">Řadit podle</label><select class="field" id="soloOrder"><option value="recommended">Doporučení</option><option value="rating">Hodnocení</option><option value="popular">Oblíbenosti</option><option value="newest">Nejnovější</option><option value="title">Názvu A–Z (načtené)</option></select></div>
+          <div><label class="field-label" for="soloAudio">Dabing / jazyk zvuku</label><select class="field" id="soloAudio"><option value="any">Bez omezení</option><option value="cs">Český zvuk</option><option value="sk">Slovenský zvuk</option><option value="cs-sk">Český nebo slovenský</option></select></div>
+          <div class="view-toggle" role="group" aria-label="Zobrazení katalogu"><button type="button" data-solo-view="grid" aria-pressed="true" title="Zobrazit plakáty">Plakáty</button><button type="button" data-solo-view="list" aria-pressed="false" title="Zobrazit seznam">Seznam</button></div>
+        </div>
+        <p class="small-note" id="soloRecommendationNote">Doporučení řadí načtené tituly podle hodnocení, počtu hlasů a popularity. Nejde o znalost tvé historie na Netflixu.</p>
+        <div id="soloFeatured"></div>
+        <div class="solo-countbar"><strong id="soloCount">Tvůj výběr</strong><span id="soloStatus" role="status"></span></div>
+        <div id="soloError" class="error" role="alert" hidden></div>
+        <div class="solo-grid" id="soloGrid" aria-busy="false"></div>
+        <div class="solo-bottom"><button type="button" class="btn btn-primary" id="soloMoreBtn">Načíst další filmy</button><button type="button" class="btn btn-ghost" id="soloStopBtn" hidden>Zastavit načítání</button><p class="small-note" id="soloCoverage"></p></div>
       </section>
       <section id="loadingScreen" class="loading" hidden aria-live="polite"><div><div class="loader" aria-hidden="true"></div><div class="eyebrow">Vybíráme z vašeho předplatného</div><h2 id="loadingTitle">Chystám váš výběr.</h2><p class="lede" id="loadingSub">Načítám aktuální nabídku pro Česko.</p></div></section>
       <section id="swipeScreen" hidden aria-labelledby="gameTitle">
@@ -99,8 +124,23 @@
     </main>
     <footer class="footer"><div><span class="footer-brand">FILM RANDE</span>Data: <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDb</a> &amp; <a href="https://www.justwatch.com/cz" target="_blank" rel="noopener noreferrer">JustWatch</a></div><div class="footer-right"><span>Česko · Jen tituly v předplatném</span><button class="text-btn" id="aboutBtn">O projektu</button></div></footer>
   </div>
+  <dialog id="audioDialog" aria-labelledby="audioTitle"><div class="dialog-inner">
+    <div class="dialog-top"><h2 id="audioTitle">Dabing bez hádání.</h2><button class="dialog-close" data-close-dialog="audioDialog" aria-label="Zavřít">×</button></div>
+    <p class="detail-note">TMDb poskytuje filmy a dostupnost, nikoli zvukové stopy. Pro český a slovenský zvuk připoj vlastní <strong>Streaming Availability API</strong>. Údaje se ověřují pro Netflix / HBO Max v Česku. Původní jazyk ani české titulky za dabing nevydáváme.</p>
+    <form id="audioConnectForm">
+      <label class="field-label" for="audioSource">Odkud máš klíč?</label><select class="field" id="audioSource"><option value="direct">Movie of the Night — přímo</option><option value="rapid">RapidAPI — Streaming Availability v4</option></select>
+      <label class="field-label" for="audioKey">API klíč zdroje zvuku (není to TMDb klíč)</label><input class="field" id="audioKey" type="password" autocomplete="off" spellcheck="false" autocapitalize="none" required placeholder="Vlastní klíč ke Streaming Availability API">
+      <label class="checkbox-line"><input type="checkbox" id="audioRemember">Zapamatovat klíč v tomto prohlížeči</label>
+      <div class="audio-connect-actions"><button type="submit" class="btn btn-primary" id="audioConnectBtn">Ověřit a připojit</button><button type="button" class="btn btn-ghost" id="audioForgetBtn">Odpojit zdroj zvuku</button></div>
+      <div id="audioError" class="error" role="alert" hidden></div><p id="audioConnectionStatus" class="small-note" role="status"></p>
+    </form>
+    <p class="small-note">Klíč se posílá jen zvolenému zdroji, nikdy do GitHubu ani TMDb. Bez zapamatování zůstává v relaci prohlížeče. Ověření titulů čerpá kvótu tvého API tarifu; požadavky se omezují a data v relaci uchováváme nejvýše 6 hodin.</p>
+    <p class="small-note">Chybějící údaje znamenají „neověřeno“, ne „bez dabingu“. Jazykový filtr pustí jen potvrzené CZ/SK audio. U seriálů se jazyky jednotlivých epizod mohou lišit.</p>
+    <a class="card-link" href="https://developers.movieofthenight.com/" target="_blank" rel="noopener noreferrer">Získat vlastní klíč u Movie of the Night ↗</a>
+  </div></dialog>
   <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="dialog-inner"><div class="dialog-top"><h2 id="detailTitle">Kde sledovat</h2><button class="dialog-close" data-close-dialog="detailDialog" aria-label="Zavřít detail">×</button></div><div id="detailContent" class="detail-note">Ověřuji dostupnost…</div></div></dialog>
   <dialog id="searchDialog" aria-labelledby="searchTitle"><div class="dialog-inner"><div class="dialog-top"><h2 id="searchTitle">Hledat titul</h2><button class="dialog-close" data-close-dialog="searchDialog" aria-label="Zavřít hledání">×</button></div><p class="detail-note">Najdi konkrétní film nebo seriál. Dostupnost na vašich službách ověříme v detailu.</p><form id="searchForm" class="search-inline"><label class="sr-only" for="searchInput">Název filmu nebo seriálu</label><input class="field" id="searchInput" placeholder="Název filmu nebo seriálu" required><button class="btn btn-primary" type="submit">Hledat</button></form><div class="search-results" id="searchResults" aria-live="polite"></div></div></dialog>
-  <dialog id="aboutDialog" aria-labelledby="aboutTitle"><div class="dialog-inner"><div class="dialog-top"><h2 id="aboutTitle">Film Rande</h2><button class="dialog-close" data-close-dialog="aboutDialog" aria-label="Zavřít informace">×</button></div><div class="about-text"><p>Nezávislý výběr filmu pro dva. Tituly, plakáty, žánry a hodnocení načítáme z <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDb</a>. Dostupnost streamovacích služeb poskytuje <a href="https://www.justwatch.com/cz" target="_blank" rel="noopener noreferrer">JustWatch</a> prostřednictvím TMDb.</p><p>Žádné filmy ani ID poskytovatelů nejsou uložené natvrdo. Výběr filtruje české předplatné. Aktualizace katalogu se mohou zpozdit; dabing a titulky je nutné ověřit přímo ve službě. Odkaz „kde sledovat“ vede na přehled nabídek, ne vždy přímo na přehrávač.</p><p>Klíč se odesílá pouze TMDb. Při zapamatování zůstane uložený v tomto prohlížeči. Hlasy žijí jen v paměti stránky; nejde o oddělené účty ani o synchronizaci dvou telefonů.</p><p>This product uses the TMDB API but is not endorsed or certified by TMDB. Projekt není spojený s Netflixem ani HBO Max.</p><div class="about-logos"><a href="https://www.themoviedb.org/about/logos-attribution" target="_blank" rel="noopener noreferrer"><img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg" alt="TMDb — The Movie Database" loading="lazy"></a><a href="https://www.justwatch.com/cz" target="_blank" rel="noopener noreferrer">Dostupnost: JustWatch ↗</a></div></div></div></dialog>
+  <dialog id="aboutDialog" aria-labelledby="aboutTitle"><div class="dialog-inner"><div class="dialog-top"><h2 id="aboutTitle">Film Rande</h2><button class="dialog-close" data-close-dialog="aboutDialog" aria-label="Zavřít informace">×</button></div><div class="about-text"><p>Nezávislý výběr filmu pro jednoho i pro dva. Tituly, plakáty, žánry a hodnocení načítáme z <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">TMDb</a>. Dostupnost streamovacích služeb poskytuje <a href="https://www.justwatch.com/cz" target="_blank" rel="noopener noreferrer">JustWatch</a> prostřednictvím TMDb.</p><p>Žádné filmy ani ID poskytovatelů nejsou uložené natvrdo. Výběr filtruje české předplatné. Aktualizace katalogu se mohou zpozdit; CZ/SK zvuk lze ověřit samostatným zdrojem Streaming Availability API. Neověřené stopy jazykovým filtrem neprocházejí; před přehráním zkontroluj konkrétní službu. Odkaz „kde sledovat“ vede na přehled nabídek, ne vždy přímo na přehrávač.</p><p>TMDb klíč se odesílá pouze TMDb. Samostatný klíč zdroje zvuku pouze zvolenému Movie of the Night nebo RapidAPI. Při zapamatování zůstane uložený v tomto prohlížeči. Hlasy žijí jen v paměti stránky; nejde o oddělené účty ani o synchronizaci dvou telefonů.</p><p>This product uses the TMDB API but is not endorsed or certified by TMDB. Projekt není spojený s Netflixem ani HBO Max.</p><div class="about-logos"><a href="https://www.themoviedb.org/about/logos-attribution" target="_blank" rel="noopener noreferrer"><img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg" alt="TMDb — The Movie Database" loading="lazy"></a><a href="https://www.justwatch.com/cz" target="_blank" rel="noopener noreferrer">Dostupnost: JustWatch ↗</a></div></div></div></dialog>
+  <div class="audio-attribution">Zvukové stopy: <a href="https://www.movieofthenight.com/about/api" target="_blank" rel="noopener noreferrer">Streaming Availability API</a>. Data se mohou opozdit; před přehráním ověř jazyk ve službě.</div>
 </body>
 </html>

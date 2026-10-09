@@ -2,7 +2,7 @@
 const API = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
 const $ = id => document.getElementById(id);
-const allScreens = ['connectScreen','setupScreen','loadingScreen','swipeScreen','handoffScreen','resultsScreen','quickScreen'];
+const allScreens = ['connectScreen','setupScreen','loadingScreen','swipeScreen','handoffScreen','resultsScreen','quickScreen','soloScreen'];
 const state = {
   credential:'', connected:false, mediaType:'movie', meta:{}, mood:'any',
   candidates:[], seen:new Set(), index:0, order:[], phase:'setup', votePartner:'A', votesA:{}, votesB:{}, providerCache:new Map(),
@@ -22,6 +22,8 @@ const titleId = m => `${state.mediaType}:${m.id}`;
 const imageUrl = (path,size='w500') => path && /^\/[a-zA-Z0-9/_.-]+$/.test(path) ? `${IMG}${size}${path}` : '';
 const tmdbLink = m => `https://www.themoviedb.org/${state.mediaType}/${encodeURIComponent(m.id)}`;
 const textDate = () => new Intl.DateTimeFormat('cs-CZ',{dateStyle:'medium'}).format(new Date());
+
+let workEpoch=0,detailRequestSeq=0;
 
 function alertAt(id,message){const el=$(id);el.textContent=message;el.hidden=!message;}
 function setScreen(name){
@@ -188,7 +190,7 @@ function getSettings(){
   const moodIds=(moodGenres[state.mood]||[]).map(name=>meta.enGenres.get(name.toLowerCase())).filter(Boolean);
   const custom=Number($('genreSelect').value)||0;
   const genres=custom?[custom]:moodIds;
-  return {mediaType:state.mediaType,providers,genres,year:Number($('sinceSelect').value),maxTime:Number($('runtimeSelect').value),rating:Number($('ratingSelect').value),mode:document.querySelector('input[name="playMode"]:checked')?.value||'couple'};
+  return {mediaType:state.mediaType,providers,genres,year:Number($('sinceSelect').value),maxTime:Number($('runtimeSelect').value),rating:Number($('ratingSelect').value),mode:document.querySelector('input[name="playMode"]:checked')?.value||'couple',...FilmCatalog.audioSettings()};
 }
 
 function discoverParams(s,page){
@@ -203,7 +205,9 @@ function discoverParams(s,page){
 async function discoverBatch({reset=false}={}){
   const s=state.settings;if(!s)throw new Error('Chybí filtry.');
   const seq=++state.requestSeq;
+  if(s.audio!=='any')return FilmCatalog.audioBatch(s,reset,seq);
   const firstPage=reset?1:state.currentPage+1;
+  if(!reset&&firstPage>state.lastTotalPages)return [];
   const first=await api(`/discover/${s.mediaType}`,discoverParams(s,firstPage));
   if(seq!==state.requestSeq)return [];
   const totalPages=Math.min(first.total_pages||1,500);
@@ -236,17 +240,20 @@ async function startGame(){
   alertAt('filterError','');
   try{state.settings=getSettings()}
   catch(err){alertAt('filterError',err.message);return}
+  if(state.settings.mode==='solo')return FilmCatalog.startSolo(state.settings);
+  const epoch=++workEpoch;
   state.working=true;state.currentPage=0;state.seen=new Set();state.index=0;state.votePartner='A';state.votesA={};state.votesB={};
   $('loadingTitle').textContent='Chystám váš výběr.';$('loadingSub').textContent='Načítám tituly z vašeho předplatného pro Česko.';setScreen('loadingScreen');
   try{
     const candidates=await discoverBatch({reset:true});
+    if(epoch!==workEpoch||!state.connected)return;
     if(!candidates.length)throw new Error('Žádné tituly neodpovídají filtrům. Zkus nižší hodnocení, delší stopáž nebo širší výběr žánrů.');
     state.candidates=candidates.slice(0,16);state.candidates.forEach(m=>state.seen.add(titleId(m)));
     state.index=0;
     if(state.settings.mode==='quick'){state.quickIndex=0;renderQuick();setScreen('quickScreen')}
     else{state.order=state.candidates.map((_,i)=>i);renderSwipe('A');setScreen('swipeScreen')}
-  }catch(err){alertAt('filterError',err.message);setScreen('setupScreen')}
-  finally{state.working=false}
+  }catch(err){if(epoch===workEpoch&&state.connected){alertAt('filterError',err.message);setScreen('setupScreen')}}
+  finally{if(epoch===workEpoch)state.working=false}
 }
 
 function getMetaForFilm(m){
@@ -264,6 +271,7 @@ function cardHTML(m){
     <div class="meta-row"><span class="meta-chip">${htm(v.year)}</span><span class="meta-chip rating">${htm(v.score)} / 10</span><span class="meta-chip">${Number(v.votes).toLocaleString('cs-CZ')} hodnocení</span></div>
     <p class="synopsis">${htm(m.overview||'Popis tohoto titulu zatím není k dispozici.')}</p>
     <div class="movie-bottom"><div class="provider-badges" data-provider-slot="${Number(m.id)}"><span class="provider-pill">Ověřuji dostupnost…</span></div>
+      <div class="audio-lines" data-audio-slot="${Number(m.id)}"></div>
       <div class="movie-links"><button class="btn btn-white" type="button" data-detail-id="${Number(m.id)}">Detail a dostupnost <span aria-hidden="true">↗</span></button><a class="card-link" href="${htm(tmdbLink(m))}" target="_blank" rel="noopener noreferrer">Na TMDb ↗</a></div>
     </div>
   </div>`;
@@ -287,6 +295,7 @@ async function watchInfo(m){
 function renderCard(container,m){
   const el=$(container);el.innerHTML=cardHTML(m);
   const slot=el.querySelector('[data-provider-slot]');
+  FilmCatalog.paintAudio(el.querySelector('[data-audio-slot]'),m,state.mediaType,{mediaType:state.mediaType,providers:selectedProviderIds()});
   watchInfo(m).then(cz=>{
     if(!slot?.isConnected)return;
     const selected=selectedProviderIds();
@@ -333,8 +342,9 @@ function renderResults(){
   $('resultSummary').textContent=matches.length?`Oba jste dali ano u ${strong.length} titulů. Zbývá vybrat, který pustíte jako první.`:'Zkuste jinou náladu nebo další výběr. Filmy, které někdo odmítl, sem nepouštíme.';
   $('resultsGrid').innerHTML=matches.length?matches.slice(0,12).map(({movie:m,a,b})=>{
     const v=getMetaForFilm(m),pic=imageUrl(m.poster_path,'w500');
-    return `<article class="result-card"><div class="result-cover">${pic?`<img src="${htm(pic)}" alt="Plakát: ${htm(titleOf(m))}" loading="lazy">`:''}<span class="result-badge">${a===2&&b===2?'OBA CHCETE VIDĚT':'SPOLEČNÝ KOMPROMIS'}</span></div><div class="result-body"><h3 class="result-title">${htm(titleOf(m))}</h3><div class="result-detail">${htm(v.year)} · ${htm(v.score)} / 10</div><p class="result-description">${htm(m.overview||'Popis není k dispozici.')}</p><button class="btn btn-ghost" type="button" data-detail-id="${Number(m.id)}">Kde sledovat ↗</button></div></article>`;
+    return `<article class="result-card"><div class="result-cover">${pic?`<img src="${htm(pic)}" alt="Plakát: ${htm(titleOf(m))}" loading="lazy">`:''}<span class="result-badge">${a===2&&b===2?'OBA CHCETE VIDĚT':'SPOLEČNÝ KOMPROMIS'}</span></div><div class="result-body"><h3 class="result-title">${htm(titleOf(m))}</h3><div class="result-detail">${htm(v.year)} · ${htm(v.score)} / 10</div><div class="audio-lines" data-result-audio="${Number(m.id)}"></div><p class="result-description">${htm(m.overview||'Popis není k dispozici.')}</p><button class="btn btn-ghost" type="button" data-detail-id="${Number(m.id)}">Kde sledovat ↗</button></div></article>`;
   }).join(''):'<div class="no-matches" style="grid-column:1/-1"><h3>Ještě jedno kolo?</h3><p class="lede">Jiný výběr může sednout lépe. Zkus další tituly nebo uvolni filtry.</p></div>';
+  for(const {movie:m} of matches.slice(0,12))FilmCatalog.paintAudio($('resultsGrid').querySelector(`[data-result-audio="${Number(m.id)}"]`),m,state.mediaType,state.settings);
 }
 
 function renderQuick(){
@@ -346,36 +356,41 @@ function nextQuick(){state.quickIndex=(state.quickIndex+1)%state.candidates.leng
 
 async function loadMore(){
   if(state.working)return;
+  const epoch=++workEpoch;
   state.working=true;
   $('loadingTitle').textContent='Další filmy na obzoru.';$('loadingSub').textContent='Čtu další části aktuálního katalogu.';setScreen('loadingScreen');
   try{
     // Pro další párování se nejprve využije další strana, případně nová kombinace stran.
     let candidates=await discoverBatch({reset:false});
+    if(epoch!==workEpoch||!state.connected)return;
     if(!candidates.length){state.currentPage=0;candidates=await discoverBatch({reset:true})}
+    if(epoch!==workEpoch||!state.connected)return;
     if(!candidates.length)throw new Error('V aktuálním vzorku katalogu už žádné nové tituly nejsou. Změň filtry.');
     state.candidates=candidates.slice(0,16);state.candidates.forEach(m=>state.seen.add(titleId(m)));
     state.votesA={};state.votesB={};state.index=0;state.votePartner='A';
     if(state.settings.mode==='quick'){state.quickIndex=0;renderQuick();setScreen('quickScreen')}
     else{state.order=state.candidates.map((_,i)=>i);renderSwipe('A');setScreen('swipeScreen')}
-  }catch(err){alertAt('filterError',err.message);setScreen('setupScreen')}
-  finally{state.working=false}
+  }catch(err){if(epoch===workEpoch&&state.connected){alertAt('filterError',err.message);setScreen('setupScreen')}}
+  finally{if(epoch===workEpoch)state.working=false}
 }
 
 async function showDetail(movie){
   if(!movie)return;
-  const dialog=$('detailDialog');
+  const dialog=$('detailDialog'),seq=++detailRequestSeq;
+  const detailSettings={mediaType:state.mediaType,providers:selectedProviderIds()};
   $('detailTitle').textContent=titleOf(movie);
   $('detailContent').innerHTML='<p>Ověřuji dostupnost v Česku a podrobnosti…</p>';
-  dialog.showModal();
+  if(!dialog.open)dialog.showModal();
   try{
     const kind=state.mediaType;
     const [cz,detail]=await Promise.all([
       watchInfo(movie),
       api(`/${kind}/${movie.id}`,{language:'cs-CZ'}).catch(()=>movie)
     ]);
+    if(seq!==detailRequestSeq||!dialog.open||kind!==state.mediaType||!state.connected)return;
     // Vypisujeme výhradně předplatné, nikoli půjčovné / nákup.
     const flatrate=cz?.flatrate||[];
-    const filtered=flatrate.filter(p=>selectedProviderIds().includes(p.provider_id));
+    const filtered=flatrate.filter(p=>detailSettings.providers.includes(p.provider_id));
     const v=getMetaForFilm(movie);
     const runtime=kind==='movie'?detail.runtime:(detail.episode_run_time||[])[0];
     const backdrop=imageUrl(detail.backdrop_path||movie.backdrop_path,'w780');
@@ -388,7 +403,8 @@ async function showDetail(movie){
       <p class="detail-note">Aktuálnost dat zajišťuje TMDb/JustWatch. Odkaz vede na přehled nabídek, nikoli nutně rovnou do aplikace.</p>
       <a href="${htm(official)}" class="btn btn-primary btn-block" target="_blank" rel="noopener noreferrer">Zobrazit nabídky přehrání ↗</a>
       <a href="${htm(tmdbLink(movie))}" class="card-link" target="_blank" rel="noopener noreferrer" style="margin-top:14px">Detail filmu/seriálu na TMDb ↗</a>`;
-  }catch(err){$('detailContent').innerHTML=`<div class="error">${htm(err.message)}</div><p><a href="${htm(tmdbLink(movie))}" target="_blank" rel="noopener noreferrer">Otevřít na TMDb ↗</a></p>`}
+    FilmCatalog.detail(movie,kind,detailSettings);
+  }catch(err){if(seq!==detailRequestSeq||!dialog.open)return;$('detailContent').innerHTML=`<div class="error">${htm(err.message)}</div><p><a href="${htm(tmdbLink(movie))}" target="_blank" rel="noopener noreferrer">Otevřít na TMDb ↗</a></p>`}
 }
 
 async function searchTitles(term){
@@ -403,8 +419,8 @@ async function searchTitles(term){
   }catch(err){$('searchResults').innerHTML=`<div class="error">${htm(err.message)}</div>`}
 }
 
-function goSetup(){state.requestSeq++;state.votePartner='A';setScreen('setupScreen')}
-function disconnect(){if(!confirm('Odpojit TMDb a odstranit uložený API klíč z tohoto prohlížeče?'))return;previewSeq++;metadataSeq++;clearTimeout(previewTimer);state.previewItems=[];state.candidates=[];state.votesA={};state.votesB={};state.credential='';state.connected=false;state.meta={};state.providerCache=new Map();storageDel('filmRandeTMDB');sessionDel('filmRandeTMDB');$('settingsBtn').hidden=true;$('searchBtn').hidden=true;$('tokenInput').value='';setStatus(false,'Katalog není připojen');setScreen('connectScreen')}
+function goSetup(){workEpoch++;state.requestSeq++;state.working=false;FilmCatalog.stopSolo();state.votePartner='A';setScreen('setupScreen');syncModeCopy();queuePreview()}
+function disconnect(){if(!confirm('Odpojit katalogy a odstranit oba uložené API klíče z tohoto prohlížeče?'))return;workEpoch++;detailRequestSeq++;state.requestSeq++;state.working=false;FilmCatalog.forgetAudio();previewSeq++;metadataSeq++;clearTimeout(previewTimer);state.previewItems=[];state.candidates=[];state.votesA={};state.votesB={};state.credential='';state.connected=false;state.meta={};state.providerCache=new Map();storageDel('filmRandeTMDB');sessionDel('filmRandeTMDB');$('settingsBtn').hidden=true;$('searchBtn').hidden=true;$('tokenInput').value='';setStatus(false,'Katalog není připojen');setScreen('connectScreen')}
 function closeDialog(id){$(id).close()}
 
 $('connectForm').addEventListener('submit',e=>{e.preventDefault();connect($('tokenInput').value,$('rememberKey').checked)});
@@ -454,9 +470,12 @@ for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener(
 // may not replace a newer filter selection, and no film data is bundled here.
 let previewTimer=null,previewSeq=0;
 function syncModeCopy(){
-  const quick=document.querySelector('input[name="playMode"]:checked')?.value==='quick';
-  $('startBtn').innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>'+(quick?'Najít rychlý tip':state.mediaType==='tv'?'Najít náš seriál':'Najít náš film');
-  $('modeHelp').textContent=quick?'Jeden tip za druhým. Bez hlasování.':'Až 16 titulů. Dva soukromé výběry. Vaše společné shody.';
+  const mode=document.querySelector('input[name="playMode"]:checked')?.value,quick=mode==='quick',solo=mode==='solo';
+  $('startBtn').innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>'+(solo?'Zobrazit můj výběr':quick?'Najít rychlý tip':state.mediaType==='tv'?'Najít náš seriál':'Najít náš film');
+  $('modeHelp').textContent=solo?'Seznam titulů, doporučení, řazení a další stránky. Bez hlasování.':quick?'Jeden tip za druhým. Bez hlasování.':'Až 16 titulů. Dva soukromé výběry. Vaše společné shody.';
+  $('setupTitle').textContent=solo?'Dobrý film. Podle tebe.':'Dobrý film. Pro oba.';
+  $('setupTitle').nextElementSibling.textContent=solo?'Nastav si náladu a projdi nabídku svého předplatného.':'Vyberte náladu. Zbytek už nechte na svých hlasech.';
+  document.querySelector('.preview-guide').innerHTML=solo?'<div><b>01 / Nastav výběr</b>Nálada, délka, hodnocení a zvuk.</div><div><b>02 / Projdi katalog</b>Plakáty nebo seznam. Další stránky.</div><div><b>03 / Vyber si film</b>Podrobnosti a dostupnost v jednom.</div>':'<div><b>01 / Vybereš ty</b>Ano, možná, nebo ne.</div><div><b>02 / Vybere ona</b>Stejné filmy. Bez nápovědy.</div><div><b>03 / Pustíte si film</b>Jen to, co zaujalo oba.</div>';
 }
 function queuePreview(){
   const seq=++previewSeq;clearTimeout(previewTimer);
@@ -470,12 +489,16 @@ function queuePreview(){
 async function loadPreview(seq){
   try{
     const settings=getSettings(),type=state.mediaType;
+    if(settings.audio!=='any'){
+      if(seq===previewSeq){$('previewGrid').innerHTML='';$('previewStatus').textContent='Jazykový filtr je aktivní. Spusť výběr: teprve potom ověříme zvukové stopy, aby náhled zbytečně nečerpal API kvótu.';}
+      return;
+    }
     const offer=await api(`/discover/${type}`,discoverParams(settings,1));
     if(seq!==previewSeq||!state.connected||type!==state.mediaType)return;
     const titles=(Array.isArray(offer.results)?offer.results:[]).filter(m=>m.id&&m.poster_path).slice(0,3);
     state.previewItems=titles;
     $('previewGrid').innerHTML=titles.map(m=>`<button type="button" class="preview-item" data-detail-id="${Number(m.id)}" aria-label="Detail: ${htm(titleOf(m))}"><div class="preview-image"><img src="${htm(imageUrl(m.poster_path,'w342'))}" alt="" loading="lazy"></div><strong>${htm(titleOf(m))}</strong><small>${htm(releaseOf(m).slice(0,4))} · ${(Number(m.vote_average)||0).toFixed(1)} / 10</small></button>`).join('');
-    $('previewStatus').textContent=titles.length?'Náhled odpovídá vašim filtrům. Dostupnost i dabing si před přehráním ověřte ve službě.':'Těmto filtrům žádný titul neodpovídá. Zkuste širší žánr, delší stopáž nebo nižší hodnocení.';
+    $('previewStatus').textContent=titles.length?'Náhled podle zvolených filtrů. Jazyky zvuku najdeš v detailu po připojení zdroje dabingu.':'Těmto filtrům žádný titul neodpovídá. Zkuste širší žánr, delší stopáž nebo nižší hodnocení.';
   }catch(err){
     if(seq!==previewSeq||!state.connected)return;
     $('previewGrid').innerHTML='';$('previewStatus').textContent=err.message||'Náhled nelze načíst. Zkuste obnovit katalog.';
@@ -486,6 +509,9 @@ $('filterForm').addEventListener('change',e=>{
   syncModeCopy();
   if(e.target.name!=='mediaType'&&e.target.name!=='playMode')queuePreview();
 });
+
+FilmCatalog.init();
+syncModeCopy();
 
 (function init(){
   const credential=sessionGet('filmRandeTMDB')||storageGet('filmRandeTMDB');
