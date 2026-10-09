@@ -1,39 +1,53 @@
-# Film Rande 🍿 — soukromý filmový selector pro dva
+# Film Rande
 
-Samostatná webová aplikace v jediném souboru (`index.html`). Filmová data **nejsou součástí souboru**: po připojení se načítají online z TMDb API, včetně dostupnosti v českém katalogu Netflixu / HBO Maxu z dat JustWatch.
+Minimalistický filmový selector pro večer ve dvou. Černé pozadí, bílá typografie, červený akcent a skutečné plakáty. Bez frameworku, buildu, externích fontů a analytiky.
+
+**Web:** https://dnesdan.github.io/film-rande/
 
 ## Spuštění
 
-1. Otevři `index.html` v moderním webovém prohlížeči.
-2. Získej si TMDb API v3 klíč (nebo API Read Access Token) na https://www.themoviedb.org/settings/api — pro osobní nekomerční použití zdarma.
-3. Vlož klíč do aplikace. Klíč se nikam mimo TMDb neodesílá. Bez zatrženého uložení je uchováván pouze pro aktuální relaci prohlížeče (pokud relace storage není dostupná, platí pouze pro otevřenou stránku).
-4. Vyber streamovací služby, žánr/náladu a další filtry. Spusť hlasování nebo rychlý tip.
+Otevři web, vlož vlastní TMDb API v3 klíč nebo API Read Access Token a vyber Netflix / HBO Max, náladu a způsob výběru. Klíč získáš v nastavení svého účtu: https://www.themoviedb.org/settings/api . Přihlašovací údaje k Netflixu ani HBO nejsou potřeba.
 
-Pokud konkrétní prohlížeč omezuje přímé otevření místního HTML, spusť jednoduchý lokální server ve složce s `index.html`:
+Filtry stopáže, žánru, hodnocení a roku jsou pod **Upřesnit výběr**. Náhled plakátů reaguje na zvolené filtry; nejde o předem připravený seznam titulů. Přepnutí na seriály mění katalog i popisek stopáže.
+
+**Hlasování ve dvou:** každý postupně ohodnotí až 16 titulů jako Ne / Možná / Ano. Druhý člověk nevidí první hlasy a dostane jiné pořadí. Do shod se dostanou pouze filmy, u kterých nikdo nedal Ne. K dispozici je také rychlý tip, další výběr a hledání konkrétního titulu.
+
+Na počítači lze hlasovat šipkami vlevo / nahoru / vpravo nebo klávesami 1 / 2 / 3. Na dotykovém zařízení fungují tlačítka i vodorovné gesto na filmové kartě.
+
+## Struktura a lokální vývoj
+
+- `index.html` — obrazovky a dialogy.
+- `app.css` — responzivní Cinema vzhled.
+- `app.js` — připojení TMDb, filtry, živé náhledy a hlasování.
+
+Všechny tři soubory musí být ve stejné složce. Nejsou potřeba npm balíčky ani sestavení:
 
 ```bash
 python3 -m http.server 8000
+# otevři http://localhost:8000
+node --check app.js
 ```
 
-Pak otevři http://localhost:8000 .
+GitHub Pages používá obsah větve `main` v kořenové složce. CSS a JavaScript mají verzované odkazy; při změně souborů zvyš `?v=cinema-1` v HTML nebo při vývoji proveď tvrdé obnovení stránky.
 
-## Na telefonu přes běžný odkaz
+## Data a soukromí
 
-Projekt obsahuje jen statické `index.html`. Můžeš jej nasadit na GitHub Pages, Netlify nebo jiné statické HTTPS hostování (bez buildu). **API klíč nevkládej do publikovaného zdrojového kódu** — aplikace se na něj každého uživatele zeptá v prohlížeči.
+Filmy, žánry, plakáty i ID poskytovatelů se načítají online z TMDb. Netflix a HBO Max se identifikují dynamicky. Regionální vyhledávání má zachovaný fallback přes globální seznam, český seznam a ověření českého předplatného pomocí discover. Výběr používá `watch_region=CZ` a `with_watch_monetization_types=flatrate`.
 
-## Co funguje
+API klíč nikdy nepatří do repozitáře. Aplikace jej posílá pouze TMDb. Bez volby zapamatování jej ukládá do `sessionStorage`, s ní do `localStorage`; při nedostupném úložišti zůstává jen v paměti otevřené stránky. **Odpojit** odstraní uložený klíč z obou úložišť. Nejde o trezor pro tajné údaje; používej vlastní prohlížeč a nepřidávej do aplikace nedůvěryhodné skripty.
 
-- Živé vyhledání Netflixu a HBO Maxu v seznamu poskytovatelů TMDb pro Česko (provider ID nejsou fixní v kódu).
-- Aktuální filmy a seriály v předplatném, nikoli půjčovném, ze serverového vyhledávání TMDb (`watch_region=CZ`, `flatrate`).
-- Nálady a žánry, rok vydání, délka, minimální hodnocení.
-- Soukromé hlasování ve dvou průchodech: Ne / Možná / Jo. Ukáže společné shody.
-- Rychlý náhodný tip, další várka, samostatné hledání titulu.
-- Detail se skutečnou dostupností pro ČR a odkazem „kde sledovat“.
+Hlasy existují pouze v paměti stránky. Soukromé hlasování znamená skryté volby v rozhraní na jednom zařízení, ne oddělené účty, šifrované hlasovací lístky ani synchronizaci dvou telefonů. Obnovení stránky rozpracované hlasování zahodí.
 
-## Omezení
+## Ověření redesignu
 
-Dostupnost pochází z TMDb / JustWatch, **nikoli přímo z API Netflixu nebo HBO Maxu**. Aktualizace se může zpozdit. Nejde o garantovaný přímý odkaz do konkrétní streamovací aplikace. Češtinu dabingu/titulků aplikace neověřuje. Vždy si před spuštěním ověř dostupnost v cílové službě.
+Rozhraní bylo otestováno v Chromium na syntetických API odpovědích v šířkách 360, 390, 540, 768, 820, 1024 a 1440 px. Kontroly pokryly připojení, náhled a změny filtrů, oba hlasovací průchody, vyloučení zamítnutých filmů, výsledky, rychlý režim, seriály, hledání, prázdný katalog, chybu 401 a regionální fallback. JavaScript prošel `node --check` a prohlížeč nehlásil chyby skriptu.
 
-Data a obrázky: © příslušní vlastníci; metadata a plakáty pomocí [TMDb](https://www.themoviedb.org), streamovací dostupnost pomocí [JustWatch](https://www.justwatch.com/cz).
+Tyto testy neověřují skutečnou nabídku služeb ani platnost uživatelova API klíče. V testovacím prostředí bylo úložiště simulované. Testovací plakáty, tituly ani přístupové údaje nejsou součástí produkčních souborů.
+
+## Omezení a zdroje
+
+Dostupnost je z TMDb / JustWatch, nikoli z přímého API Netflixu či HBO Maxu. Změny katalogů se mohou projevit se zpožděním. Dabing a titulky aplikace neověřuje; před přehráním zkontroluj cílovou službu. Odkaz na přehled nabídek není zaručený přímý odkaz do přehrávače.
+
+Metadata a plakáty: [TMDb](https://www.themoviedb.org). Dostupnost: [JustWatch](https://www.justwatch.com/cz). Data, obrázky a značky náleží příslušným vlastníkům. Projekt není spojený s Netflixem ani HBO Max.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
